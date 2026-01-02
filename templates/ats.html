@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ATS SCORE | Resume Compatibility Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .drag-active {
+      border-color: #2563eb;
+      background-color: #eff6ff;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800">
+
+<!-- HEADER -->
+<header class="bg-white border-b">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+    <h1 class="text-xl font-bold">
+      ATS <span class="text-blue-600">SCORE</span>
+    </h1>
+    <span class="text-sm text-gray-500">AI Resume Screening</span>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="max-w-7xl mx-auto px-6 py-10 grid lg:grid-cols-12 gap-8">
+
+  <!-- INPUT -->
+  <section class="lg:col-span-4 space-y-6">
+
+    <div class="bg-white border rounded-lg p-6">
+      <h2 class="font-semibold mb-3">Job Description</h2>
+      <textarea id="jobDescription"
+        class="w-full h-40 border rounded-md p-3 text-sm resize-none focus:ring-2 focus:ring-blue-500 outline-none"
+        placeholder="Paste job description here..."></textarea>
+    </div>
+
+    <div class="bg-white border rounded-lg p-6">
+      <h2 class="font-semibold mb-3">Upload Resume (PDF)</h2>
+
+      <!-- DRAG & DROP ZONE -->
+      <div id="dropZone"
+        class="border-2 border-dashed rounded-md p-6 text-center cursor-pointer transition">
+        <input type="file" id="resumeFile" class="hidden" accept=".pdf">
+        <p id="fileName" class="text-sm text-gray-500">
+          Drag & drop your resume here or click to upload
+        </p>
+      </div>
+    </div>
+
+    <button id="analyzeBtn"
+      class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-md">
+      Analyze Resume
+    </button>
+
+  </section>
+
+  <!-- RESULTS -->
+  <section class="lg:col-span-8">
+
+    <div id="placeholder"
+      class="bg-white border rounded-lg p-10 text-center text-gray-500">
+      Upload a resume and job description to generate ATS score.
+    </div>
+
+    <div id="loading"
+      class="hidden bg-white border rounded-lg p-10 text-center">
+      <div class="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+      <p class="font-medium">Analyzing resume with ATS engine…</p>
+    </div>
+
+    <div id="results"
+      class="hidden bg-white border rounded-lg p-8 space-y-8">
+
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-semibold">ATS Compatibility Score</h2>
+          <p id="verdict" class="text-sm mt-1"></p>
+        </div>
+        <div id="scoreText" class="text-5xl font-bold">0%</div>
+      </div>
+
+      <hr>
+
+      <div>
+        <h3 class="font-semibold text-green-600 mb-2">Strengths</h3>
+        <ul id="strengthsList" class="list-disc pl-5 space-y-2 text-sm"></ul>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-orange-600 mb-2">Improvement Areas</h3>
+        <ul id="improvementsList" class="list-disc pl-5 space-y-2 text-sm"></ul>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<!-- SCRIPT -->
+<script>
+const dropZone = document.getElementById("dropZone");
+const resumeInput = document.getElementById("resumeFile");
+const fileName = document.getElementById("fileName");
+const analyzeBtn = document.getElementById("analyzeBtn");
+
+const placeholder = document.getElementById("placeholder");
+const loading = document.getElementById("loading");
+const results = document.getElementById("results");
+
+/* CLICK UPLOAD */
+dropZone.addEventListener("click", () => resumeInput.click());
+
+/* DRAG EVENTS */
+dropZone.addEventListener("dragover", e => {
+  e.preventDefault();
+  dropZone.classList.add("drag-active");
+});
+
+dropZone.addEventListener("dragleave", () => {
+  dropZone.classList.remove("drag-active");
+});
+
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-active");
+
+  if (e.dataTransfer.files.length) {
+    resumeInput.files = e.dataTransfer.files;
+    validateFile();
+  }
+});
+
+resumeInput.addEventListener("change", validateFile);
+
+function validateFile() {
+  const file = resumeInput.files[0];
+  if (!file) return;
+
+  if (file.type !== "application/pdf") {
+    alert("Only PDF files are allowed.");
+    resumeInput.value = "";
+    return;
+  }
+
+  fileName.textContent = file.name;
+  fileName.classList.add("text-blue-600");
+}
+
+/* ANALYZE */
+analyzeBtn.addEventListener("click", async () => {
+  const jd = document.getElementById("jobDescription").value.trim();
+  const file = resumeInput.files[0];
+
+  if (!jd || !file) {
+    alert("Resume and job description are required.");
+    return;
+  }
+
+  placeholder.classList.add("hidden");
+  results.classList.add("hidden");
+  loading.classList.remove("hidden");
+
+  const formData = new FormData();
+  formData.append("resume", file);
+  formData.append("job_description", jd);
+
+  try {
+    const res = await fetch("http://localhost:8080/analyze", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await res.json();
+    renderResults(data.ats_result);
+  } catch {
+    alert("ATS analysis failed. Try again.");
+  } finally {
+    loading.classList.add("hidden");
+    results.classList.remove("hidden");
+  }
+});
+
+function renderResults(text) {
+  const score = parseInt(text.match(/ATS Match:\s*(\d+)%/)?.[1] || 0);
+  document.getElementById("scoreText").textContent = score + "%";
+
+  const verdict = document.getElementById("verdict");
+  verdict.textContent =
+    score >= 75 ? "High Shortlisting Probability" :
+    score >= 50 ? "Moderate ATS Match" :
+    "Low ATS Compatibility";
+
+  verdict.className =
+    score >= 75 ? "text-green-600" :
+    score >= 50 ? "text-orange-600" :
+    "text-red-600";
+
+  const extract = t =>
+    t.split("\n").map(l => l.replace("-", "").trim()).filter(Boolean);
+
+  const strengths = extract(
+    text.split("Strengths:")[1]?.split("Improvement Suggestions:")[0] || ""
+  );
+
+  const improvements = extract(
+    text.split("Improvement Suggestions:")[1] || ""
+  );
+
+  document.getElementById("strengthsList").innerHTML =
+    strengths.map(s => `<li>${s}</li>`).join("");
+
+  document.getElementById("improvementsList").innerHTML =
+    improvements.map(i => `<li>${i}</li>`).join("");
+}
+</script>
+
+</body>
+</html>
